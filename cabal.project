@@ -52,31 +52,37 @@ source-repository-package
     type: git
     location: https://github.com/kadena-io/pact.git
     tag: 8f9844cf48f8be55dad22ffa50fe9281a031b85f
+    --sha256: sha256-CsLXC8SjWjAE1dY7+AWUD1NyukOSnNiUKIefJ3pVAFM=
 
 source-repository-package
     type: git
     location: https://github.com/kadena-io/pact-json.git
     tag: f8314fe8313702b07102a9f8330ad91630d1b124
+    --sha256: sha256-hfiyzbBT+LTCwhsoKw0RmTPJeFGkAZY0IE1X0OxjVNs=
 
 source-repository-package
     type: git
     location: https://github.com/kadena-io/chainweb-storage.git
     tag: af9f42c78bcd703ac382cfd8101c6d1c66a035f1
+    --sha256: sha256-+C4yNKjf0SY3mwxjmHJ8OJGAfcZz1HTFQyT09fhQ9Co=
 
 source-repository-package
     type: git
     location: https://github.com/kadena-io/rocksdb-haskell.git
     tag: c2b3dd8bb714a12ea6763565d168a03df38fcc58
+    --sha256: sha256-gLkxfHeg4D7S53Uzt807Q1bD0/s5dO7b+51Rbrq2XYg=
 
 source-repository-package
     type: git
     location: https://github.com/kadena-io/rosetta.git
     tag: 6c8dd2eea1f6d0dba925646dbcb6e07feeccbfd5
+    --sha256: sha256-EE8A/5wJYqIfx1uz/v3QjWCFgaeVLf/fi1r03A3w8qY=
 
 source-repository-package
     type: git
     location: https://github.com/kadena-io/kadena-ethereum-bridge.git
     tag: 7b8daff3e79e3fcfb1ae7ba61b779993244658ea
+    --sha256: sha256-mYRbw+MqojStvL6eeXQk+SwIx5iWPpEA1BenvRzWvg0=
 
 -- Required for GHC-9:
 
@@ -85,36 +91,36 @@ source-repository-package
     type: git
     location: https://github.com/larskuhtz/ixset-typed
     tag: d8019c3404d6f3b3c0b0416e9899cfdf614ef425
+    --sha256: sha256-AwS/uqzUQrTUgxEHNjpX65JKFcaOuZN+03mI16JXuiY=
 
 -- Inherited from pact:
 source-repository-package
-  type: git
-  tag: f991ffb74a1a1ab86f14e751d7c4f4ba549785b3
-  location: https://github.com/hackage-package-forks/trifecta
-
-source-repository-package
-  type: git
-  tag: b66e3a04c20f753213fe7e5115a95b3fe34109f9
-  location: https://github.com/larskuhtz/sbv
+    type: git
+    tag: f991ffb74a1a1ab86f14e751d7c4f4ba549785b3
+    location: https://github.com/hackage-package-forks/trifecta
+    --sha256: sha256-m+IplwZ9DxJt6Mzkq961BzgiboHJul6w1uwDUqXnljo=
 
 -- Required for GHC-9.6
 
 source-repository-package
-  type: git
-  tag: 0c815bf9043d0f0cbda92b80ef791892e2b7fb43
-  location: https://github.com/haskell-streaming/streaming
+    type: git
+    tag: 0c815bf9043d0f0cbda92b80ef791892e2b7fb43
+    location: https://github.com/haskell-streaming/streaming
+    --sha256: sha256-kxMmrKl03eOWpGl09abeH/FnBG5nm2kb4l048dSuAWA=
 
 -- Patch merged into master (upcoming verison 10.0). We are currently using 9.2
 source-repository-package
-  type: git
-  tag: b66e3a04c20f753213fe7e5115a95b3fe34109f9
-  location: https://github.com/larskuhtz/sbv
+    type: git
+    tag: b66e3a04c20f753213fe7e5115a95b3fe34109f9
+    location: https://github.com/larskuhtz/sbv
+    --sha256: sha256-NQ00KGhu4IWeAry0r6m6FR/iCu/XboWtjOhbU+gtijU=
 
 source-repository-package
-  type: git
-  tag: 9eb03ebe03f658a3401ec2a26a55be175eeb390c
-  location: https://github.com/larskuhtz/massiv
-  subdir: massiv
+    type: git
+    tag: 9eb03ebe03f658a3401ec2a26a55be175eeb390c
+    location: https://github.com/larskuhtz/massiv
+    subdir: massiv
+    --sha256: sha256-UbSGfV4IGa7lakpEJ+vlhkyOPtvVilopJi+pkNK4IyE=
 
 -- -------------------------------------------------------------------------- --
 -- Relaxed Bounds
