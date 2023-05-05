@@ -109,6 +109,9 @@ tests = ScheduledTest label $
       \ctx -> _schTest $ execLocalTest ctx "testAllowReadsLocalFails" testAllowReadsLocalFails
     , withPactCtxSQLite testVersion (bhdbIO rocksIO) pdb allowReads $
       \ctx -> _schTest $ execLocalTest ctx "testAllowReadsLocalSuccess" testAllowReadsLocalSuccess
+    , withPactCtxSQLite testVersion (bhdbIO rocksIO) pdb allowReads $
+      \ctx -> _schTest $ testRewind ctx
+      -- execLocalTest ctx "testAllowReadsLocalSuccess" testAllowReadsLocalSuccess
     ]
   where
     bhdbIO :: IO RocksDb -> IO BlockHeaderDb
@@ -542,6 +545,29 @@ execLocalTest runPact name (trans',check) = testCaseSch name (go >>= check)
   where
     go = do
       trans <- trans'
+      results' <- tryAllSynchronous $ runPact $ \_ ->
+        execLocal trans Nothing Nothing Nothing
+      case results' of
+        Right (MetadataValidationFailure e) ->
+          return $ Left $ show e
+        Right (LocalResultLegacy cr) -> return $ Right cr
+        Right (LocalResultWithWarns cr _) -> return $ Right cr
+        Left e -> return $ Left $ show e
+
+testRewind
+    :: CanReadablePayloadCas tbl
+    => WithPactCtxSQLite tbl
+    -> ScheduledTest
+testRewind runPact = testCaseSch "testRewind" $ do
+  tx <- buildCwCmd $ mkCmd "testRewind" $
+         mkExec' "(at 'balance (read coin.coin-table \"sender00\"))"
+  execTrans tx >>= (checkLocalSuccess $
+      checkPactResultSuccessLocal "testAllowReadsLocalSuccess" $
+      assertEqual "sender00 bal" (pDecimal 100_000_000.0))
+
+  -- (go >>= check)
+  where
+    execTrans trans = do
       results' <- tryAllSynchronous $ runPact $ \_ ->
         execLocal trans Nothing Nothing Nothing
       case results' of
