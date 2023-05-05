@@ -565,6 +565,46 @@ testRewind runPact = testCaseSch "testRewind" $ do
       checkPactResultSuccessLocal "testAllowReadsLocalSuccess" $
       assertEqual "sender00 bal" (pDecimal 100_000_000.0))
 
+      -- forM [ impl, setupUser, fundGasAcct ] $ \rpc ->
+      --   buildCwCmd $
+      --   set cbSigners [s01] $
+      --   set cbSender "sender01" $
+      --   mkCmd "testGasPayer" rpc
+  tx' <- buildCwCmd $ set cbSigners [mkSigner' sender00 [ mkTransferCap "sender00" "sender01" 1.0, mkGasCap ]] $ set cbSender "sender00" $ mkCmd "testRewind" $
+         mkExec' "(coin.transfer \"sender00\" \"sender01\" 1.0)"
+
+  tx'' <- buildCwCmd $ set cbSigners [mkSigner' sender00 []] $ set cbSender "sender00" $ mkCmd "testRewind" $
+         mkExec' "(at 'balance (read coin.coin-table \"sender00\"))"
+
+  r <- tryAllSynchronous $ runPact $ \pde -> do
+    execTransactions False defaultMiner (V.fromList [tx', tx''])
+      (EnforceCoinbaseFailure True) (CoinbaseUsePrecompiled True) pde Nothing Nothing
+      >>= throwOnGasFailure
+  rr <- case r of
+    Right results -> Right <$> do
+      let outputs = V.toList $ snd <$> _transactionPairs results
+          tcode = _pNonce . payloadObj . _cmdPayload
+          inputs = map (showPretty . tcode) [tx']
+      return $ TestResponse
+        (zip inputs (toHashCommandResult <$> outputs))
+        (toHashCommandResult $ _transactionCoinbase results)
+    Left e -> return $ Left $ show e
+
+  print rr
+  -- case rr of
+  --   Left _ -> print "Fail"
+  --   (Right (TestResponse [(_,cr)] _)) -> do
+  --     checkPactResultSuccess "transfer succeeds" (_crResult cr) $ \pv ->
+  --       assertEqual "transfer succeeds" (pString "Write succeeded") pv
+      -- e <- mkTransferEvent "sender00" "sender01" 1.0 "coin" "_S6HOO3J8-dEusvtnjSF4025dAxKu6eFSIOZocQwimA"
+      -- assertEqual "event found" [e] (_crEvents cr)
+
+
+    -- execLocal tx'' Nothing Nothing Nothing
+    -- execTrans tx'' >>= (checkLocalSuccess $
+    --     checkPactResultSuccessLocal "testAllowReadsLocalSuccess" $
+    --     assertEqual "sender00 bal" (pDecimal 99_000_000.0))
+
   -- (go >>= check)
   where
     execTrans trans = do
