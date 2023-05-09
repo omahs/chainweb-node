@@ -278,6 +278,7 @@ pact45UpgradeTest = do
   -- sender00 balance 99999978.0496
   -- block height 57
 
+
   balanceSender00 <- runLocalWithDepth (Just $ BlockHeight 1) cid $ set cbGasLimit 70000 $ mkCmd "nonce" $ mkExec' "(coin.get-balance \"sender00\")"
   liftIO $ print (3, balanceSender00)
 

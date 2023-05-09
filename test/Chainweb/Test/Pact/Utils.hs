@@ -601,8 +601,9 @@ testPactCtxSQLite
   -> SQLiteEnv
   -> PactServiceConfig
   -> (TxContext -> GasModel)
+  -> Maybe MemPoolAccess
   -> IO (TestPactCtx tbl, PactDbEnv')
-testPactCtxSQLite v cid bhdb pdb sqlenv conf gasmodel = do
+testPactCtxSQLite v cid bhdb pdb sqlenv conf gasmodel mempoolAccess = do
     (dbSt,cpe) <- initRelationalCheckpointer' initialBlockState sqlenv cpLogger v cid
     let rs = readRewards
         ph = ParentHeader $ genesisBlockHeader v cid
@@ -616,7 +617,7 @@ testPactCtxSQLite v cid bhdb pdb sqlenv conf gasmodel = do
     loggers = pactTestLogger False -- toggle verbose pact test logging
     cpLogger = newLogger loggers $ LogName ("Checkpointer" ++ show cid)
     pactServiceEnv cpe rs = PactServiceEnv
-        { _psMempoolAccess = Nothing
+        { _psMempoolAccess = mempoolAccess
         , _psCheckpointEnv = cpe
         , _psPdb = pdb
         , _psBlockHeaderDb = bhdb
@@ -664,7 +665,7 @@ withWebPactExecutionService v pactConfig bdb mempoolAccess gasmodel act =
 
     mkPact (sqlenv, c) = do
         bhdb <- getBlockHeaderDb c bdb
-        (ctx,_) <- testPactCtxSQLite v c bhdb (_bdbPayloadDb bdb) sqlenv pactConfig gasmodel
+        (ctx,_) <- testPactCtxSQLite v c bhdb (_bdbPayloadDb bdb) sqlenv pactConfig gasmodel (Just mempoolAccess)
         return $ (c,) $ PactExecutionService
           { _pactNewBlock = \m p ->
               evalPactServiceM_ ctx $ execNewBlock mempoolAccess p m
@@ -747,7 +748,7 @@ withPactCtxSQLite v bhdbIO pdbIO conf f =
         bhdb <- bhdbIO
         pdb <- pdbIO
         s <- ios
-        testPactCtxSQLite v cid bhdb pdb s conf freeGasModel
+        testPactCtxSQLite v cid bhdb pdb s conf freeGasModel Nothing
 
 toTxCreationTime :: Integral a => Time a -> TxCreationTime
 toTxCreationTime (Time timespan) = TxCreationTime $ fromIntegral $ timeSpanToSeconds timespan

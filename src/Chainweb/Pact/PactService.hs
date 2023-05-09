@@ -46,7 +46,7 @@ import qualified Data.Aeson as A
 import Data.Default (def)
 import qualified Data.DList as DL
 import Data.Either
-import Data.Foldable (toList)
+import Data.Foldable (toList, for_)
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Data.Text (Text)
@@ -658,6 +658,11 @@ execLocal cwtx preflight sigVerify rdepth = withDiscardedBatch $ do
             enforceKeysetFormats' ctx
         logger = P.newLogger _psLoggers "execLocal"
         initialGas = initialGasOf $ P._cmdPayload cwtx
+
+    for_ _psMempoolAccess $ \_ -> do
+        traceShowM ("got mempool" :: String)
+        -- TODO put a tx in mempool callback
+
 
     traceShowM ("execLocal.withCheckpointerRewind>" :: String)
     withCheckpointerRewind rewindHeight rewindHeader "execLocal" $

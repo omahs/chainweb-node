@@ -270,7 +270,7 @@ withCheckpointerRewind
     -> (PactDbEnv' -> PactServiceM tbl (WithCheckpointerResult a))
     -> PactServiceM tbl a
 withCheckpointerRewind rewindLimit p caller act = do
-    traceShowM ("withCheckpointerRewind.rewindTo>" :: String)
+    -- traceShowM ("withCheckpointerRewind.rewindTo>" :: String)
     rewindTo rewindLimit p
         -- This updates '_psParentHeader'
     withCheckpointerWithoutRewind p caller act
@@ -353,11 +353,11 @@ rewindTo rewindLimit (Just (ParentHeader parent)) = do
         Nothing -> throwM NoBlockValidatedYet
         Just p -> return p
 
-    traceShowM ("rewindTo.last hash " ++ show lastHash)
+    -- traceShowM ("rewindTo.last hash " ++ show lastHash)
 
     if lastHash == parentHash
       then do
-        traceShowM ("rewindTo.last hash equals to parent" :: String)
+        -- traceShowM ("rewindTo.last hash equals to parent" :: String)
         -- We want to guarantee that '_psParentHeader' is in sync with the
         -- latest block of the checkpointer at the end of and call to
         -- 'rewindTo'. In the @else@ branch this is taken care of by the call to
