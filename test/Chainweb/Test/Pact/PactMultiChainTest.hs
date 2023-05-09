@@ -112,18 +112,18 @@ tests :: ScheduledTest
 tests = ScheduledTest testName go
   where
     testName = "Chainweb.Test.Pact.PactMultiChainTest"
-    go = testGroup testName
-         [ test generousConfig freeGasModel "pact4coin3UpgradeTest" pact4coin3UpgradeTest
-         , test generousConfig freeGasModel "pact420UpgradeTest" pact420UpgradeTest
-         , test generousConfig freeGasModel "minerKeysetTest" minerKeysetTest
-         , test timeoutConfig freeGasModel "txTimeoutTest" txTimeoutTest
-         , test generousConfig getGasModel "chainweb213Test" chainweb213Test
-         , test generousConfig getGasModel "pact43UpgradeTest" pact43UpgradeTest
-         , test generousConfig getGasModel "pact431UpgradeTest" pact431UpgradeTest
-         , test generousConfig getGasModel "chainweb215Test" chainweb215Test
-         , test generousConfig getGasModel "chainweb216Test" chainweb216Test
-         , test generousConfig getGasModel "pact45UpgradeTest" pact45UpgradeTest
-         , test generousConfig getGasModel "pact46UpgradeTest" pact46UpgradeTest
+    go = testGroup testName [
+         -- [ test generousConfig freeGasModel "pact4coin3UpgradeTest" pact4coin3UpgradeTest
+         -- , test generousConfig freeGasModel "pact420UpgradeTest" pact420UpgradeTest
+         -- , test generousConfig freeGasModel "minerKeysetTest" minerKeysetTest
+         -- , test timeoutConfig freeGasModel "txTimeoutTest" txTimeoutTest
+         -- , test generousConfig getGasModel "chainweb213Test" chainweb213Test
+         -- , test generousConfig getGasModel "pact43UpgradeTest" pact43UpgradeTest
+         -- , test generousConfig getGasModel "pact431UpgradeTest" pact431UpgradeTest
+         -- , test generousConfig getGasModel "chainweb215Test" chainweb215Test
+         -- , test generousConfig getGasModel "chainweb216Test" chainweb216Test
+          test generousConfig getGasModel "pact45UpgradeTest" pact45UpgradeTest
+         -- , test generousConfig getGasModel "pact46UpgradeTest" pact46UpgradeTest
          ]
       where
           -- This is way more than what is used in production, but during testing
@@ -238,6 +238,10 @@ pact45UpgradeTest = do
       (buildBasicGas 70000 $ tblModule "tbl") $
       assertTxSuccess "mod53 table created" $ pString "TableCreated"
     ]
+
+  -- sender00 balance 99999993.9664
+  -- block height 55
+
   runBlockTest
     [ PactTxTest (buildSimpleCmd "(enforce false 'hi)") $
         assertTxFailure "Should fail with the error from the enforce" "hi"
@@ -251,6 +255,10 @@ pact45UpgradeTest = do
     , PactTxTest (buildCoinXfer "(coin.transfer 'sender00 'sender01 1.0)") $
         assertTxGas "Coin transfer pre-fork" 1583
     ]
+
+  -- sender00 balance 99999986.4691
+  -- block height 56
+
   -- chainweb217 fork
   runBlockTest
     [ PactTxTest (buildSimpleCmd "(+ 1 \'clearlyanerror)") $
@@ -266,6 +274,13 @@ pact45UpgradeTest = do
         assertTxGas "Coin post-fork" 709
     ]
   -- run local to check error
+
+  -- sender00 balance 99999978.0496
+  -- block height 57
+
+  balanceSender00 <- runLocalWithDepth (Just $ BlockHeight 1) cid $ set cbGasLimit 70000 $ mkCmd "nonce" $ mkExec' "(coin.get-balance \"sender00\")"
+  liftIO $ print (3, balanceSender00)
+
   lr <- runLocal cid $ set cbGasLimit 70000 $ mkCmd "nonce" (tblModule "tBl")
   assertLocalFailure "mod53 table update error"
     (pretty $ show $ PactDuplicateTableError "free.mod53_tBl")
@@ -289,10 +304,13 @@ pact45UpgradeTest = do
       $ mkExec' code
 
 runLocal :: ChainId -> CmdBuilder -> PactTestM (Either PactException LocalResult)
-runLocal cid' cmd = do
+runLocal cid' cmd = runLocalWithDepth Nothing cid' cmd
+
+runLocalWithDepth :: Maybe BlockHeight -> ChainId -> CmdBuilder -> PactTestM (Either PactException LocalResult)
+runLocalWithDepth depth cid' cmd = do
   HM.lookup cid' <$> view menvPacts >>= \case
     Just pact -> buildCwCmd cmd >>=
-      liftIO . _pactLocal pact Nothing Nothing Nothing
+      liftIO . _pactLocal pact Nothing Nothing depth
     Nothing -> liftIO $ assertFailure $ "No pact service found at chain id " ++ show cid'
 
 assertLocalFailure

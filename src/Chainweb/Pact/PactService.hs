@@ -96,6 +96,8 @@ import Chainweb.Version
 import Data.LogMessage
 import Utils.Logging.Trace
 
+import Debug.Trace (traceShowM)
+
 runPactService
     :: Logger logger
     => CanReadablePayloadCas tbl
@@ -657,6 +659,7 @@ execLocal cwtx preflight sigVerify rdepth = withDiscardedBatch $ do
         logger = P.newLogger _psLoggers "execLocal"
         initialGas = initialGasOf $ P._cmdPayload cwtx
 
+    traceShowM ("execLocal.withCheckpointerRewind>" :: String)
     withCheckpointerRewind rewindHeight rewindHeader "execLocal" $
       \(PactDbEnv' pdbenv) -> do
         --
@@ -667,6 +670,7 @@ execLocal cwtx preflight sigVerify rdepth = withDiscardedBatch $ do
         --
         r <- case preflight of
           Just PreflightSimulation -> do
+            traceShowM ("execLocal.withCheckpointerRewind>preflight" :: String)
             assertLocalMetadata cmd ctx sigVerify >>= \case
               Right{} -> do
                 T3 cr _mc warns <- liftIO $ applyCmd
@@ -679,6 +683,7 @@ execLocal cwtx preflight sigVerify rdepth = withDiscardedBatch $ do
                 pure $ LocalResultWithWarns cr' warns'
               Left e -> pure $ MetadataValidationFailure e
           _ ->  liftIO $ do
+            traceShowM ("execLocal.withCheckpointerRewind>not preflight" :: String)
             cr <- applyLocal
               logger _psGasLogger pdbenv
               chainweb213GasModel ctx spv

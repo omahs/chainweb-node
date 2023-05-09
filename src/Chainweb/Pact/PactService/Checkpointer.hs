@@ -109,6 +109,8 @@ import Chainweb.Utils hiding (check)
 
 import Chainweb.Storage.Table
 
+import Debug.Trace
+
 -- | Support lifting bracket style continuations in 'IO' into 'PactServiceM' by
 -- providing a function that allows unwrapping pact actions in IO while
 -- threading through the pact service state.
@@ -268,6 +270,7 @@ withCheckpointerRewind
     -> (PactDbEnv' -> PactServiceM tbl (WithCheckpointerResult a))
     -> PactServiceM tbl a
 withCheckpointerRewind rewindLimit p caller act = do
+    traceShowM ("withCheckpointerRewind.rewindTo>" :: String)
     rewindTo rewindLimit p
         -- This updates '_psParentHeader'
     withCheckpointerWithoutRewind p caller act
@@ -344,13 +347,17 @@ rewindTo
 rewindTo _ Nothing = return ()
 rewindTo rewindLimit (Just (ParentHeader parent)) = do
 
+    traceShowM ("rewindTo.checking hashes" :: String)
     -- skip if the checkpointer is already at the target.
     (_, lastHash) <- getCheckpointer >>= liftIO . _cpGetLatestBlock >>= \case
         Nothing -> throwM NoBlockValidatedYet
         Just p -> return p
 
+    traceShowM ("rewindTo.last hash " ++ show lastHash)
+
     if lastHash == parentHash
-      then
+      then do
+        traceShowM ("rewindTo.last hash equals to parent" :: String)
         -- We want to guarantee that '_psParentHeader' is in sync with the
         -- latest block of the checkpointer at the end of and call to
         -- 'rewindTo'. In the @else@ branch this is taken care of by the call to
@@ -358,6 +365,9 @@ rewindTo rewindLimit (Just (ParentHeader parent)) = do
         setParentHeader "rewindTo" (ParentHeader parent)
       else do
         lastHeader <- findLatestValidBlock >>= maybe failNonGenesisOnEmptyDb return
+
+        traceShowM ("rewindTo.last header " ++ show lastHeader)
+
         logInfo $ T.unpack $ "rewind from last to checkpointer target"
             <> ". last height: " <> sshow (_blockHeight lastHeader)
             <> "; last hash: " <> blockHashToText (_blockHash lastHeader)
@@ -365,6 +375,7 @@ rewindTo rewindLimit (Just (ParentHeader parent)) = do
             <> "; target hash: " <> blockHashToText parentHash
 
         failOnTooLowRequestedHeight rewindLimit lastHeader
+        traceShowM ("rewindTo.play fork" :: String)
         playFork lastHeader
 
   where
