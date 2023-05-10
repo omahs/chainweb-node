@@ -335,17 +335,22 @@ makeLenses ''CheckpointEnv
 newtype SQLiteFlag = SQLiteFlag { getFlag :: CInt }
   deriving newtype (Eq, Ord, Bits, Num)
 
--- TODO: get rid of this shim, it's probably not necessary
 data MemPoolAccess = MemPoolAccess
-  { mpaGetBlock
+  { -- | Given maximum block size, produce a candidate block of transactions
+    -- for mining.
+    --
+    mpaGetBlock
         :: BlockFill
         -> MempoolPreBlockCheck ChainwebTransaction
         -> BlockHeight
         -> BlockHash
         -> BlockHeader
         -> IO (Vector ChainwebTransaction)
+
   , mpaSetLastHeader :: BlockHeader -> IO ()
   , mpaProcessFork :: BlockHeader -> IO ()
+
+    -- | Mark a transaction as bad.
   , mpaBadlistTx :: Vector TransactionHash -> IO ()
   }
 

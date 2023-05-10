@@ -668,7 +668,7 @@ withWebPactExecutionService v pactConfig bdb mempoolAccess gasmodel act =
         (ctx,_) <- testPactCtxSQLite v c bhdb (_bdbPayloadDb bdb) sqlenv pactConfig gasmodel (Just mempoolAccess)
         return $ (c,) $ PactExecutionService
           { _pactNewBlock = \m p ->
-              evalPactServiceM_ ctx $ execNewBlock mempoolAccess p m
+              evalPactServiceM_ ctx $ execNewBlock mempoolAccess Nothing p m
           , _pactValidateBlock = \h d ->
               evalPactServiceM_ ctx $ execValidateBlock mempoolAccess h d
           , _pactLocal = \pf sv rd cmd ->

@@ -294,7 +294,7 @@ data MempoolBackend t = MempoolBackend {
     -- | Returns 'True' if the transaction is badlisted.
   , mempoolCheckBadList :: Vector TransactionHash -> IO (Vector Bool)
 
-    -- | given maximum block size, produce a candidate block of transactions
+    -- | Given maximum block size, produce a candidate block of transactions
     -- for mining.
     --
   , mempoolGetBlock

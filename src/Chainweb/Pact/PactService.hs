@@ -8,6 +8,10 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 
+{-# OPTIONS_GHC -Wno-unused-matches #-}
+{-# OPTIONS_GHC -Wno-unused-local-binds #-}
+{-# OPTIONS_GHC -Wno-unused-imports #-}
+
 -- |
 -- Module: Chainweb.Pact.PactService
 -- Copyright: Copyright © 2018,2019,2020 Kadena LLC.
@@ -46,6 +50,8 @@ import qualified Data.Aeson as A
 import Data.Default (def)
 import qualified Data.DList as DL
 import Data.Either
+import Data.Maybe (fromMaybe)
+import Data.Traversable (for)
 import Data.Foldable (toList, for_)
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
@@ -86,6 +92,7 @@ import Chainweb.Pact.Service.Types
 import Chainweb.Pact.TransactionExec
 import Chainweb.Pact.Types
 import Chainweb.Pact.Validations
+import Chainweb.Pact.NoCoinbase (noCoinbase)
 import Chainweb.Payload
 import Chainweb.Payload.PayloadStore
 import Chainweb.Time
@@ -287,7 +294,7 @@ serviceRequests logFn memPoolAccess reqQ = do
                 trace logFn "Chainweb.Pact.PactService.execNewBlock"
                     (_parentHeader _newBlockHeader) 1 $
                     tryOne "execNewBlock" _newResultVar $
-                        execNewBlock memPoolAccess _newBlockHeader _newMiner
+                        execNewBlock memPoolAccess Nothing _newBlockHeader _newMiner
                 go
             ValidateBlockMsg ValidateBlockReq {..} -> do
                 trace logFn "Chainweb.Pact.PactService.execValidateBlock"
@@ -465,10 +472,11 @@ data BlockFilling = BlockFilling
 execNewBlock
     :: CanReadablePayloadCas tbl
     => MemPoolAccess
+    -> Maybe BlockHeight
     -> ParentHeader
     -> Miner
     -> PactServiceM tbl PayloadWithOutputs
-execNewBlock mpAccess parent miner = do
+execNewBlock mpAccess mdepth parent miner = do
     updateMempool
     withDiscardedBatch $ do
       withCheckpointerRewind newblockRewindLimit (Just parent) "execNewBlock" doNewBlock
@@ -482,7 +490,7 @@ execNewBlock mpAccess parent miner = do
     -- This is intended to mitigate mining attempts during replay.
     -- In theory we shouldn't need to rewind much ever, but values
     -- less than this are failing in PactReplay test.
-    newblockRewindLimit = Just 8
+    newblockRewindLimit = Just $ fromMaybe 8 mdepth
 
     getBlockTxs :: BlockFill -> PactServiceM tbl (Vector ChainwebTransaction)
     getBlockTxs bfState = do
@@ -559,6 +567,10 @@ execNewBlock mpAccess parent miner = do
 
           pairs <- execTransactionsOnly miner newTrans pdbenv (Just txTimeLimit) `catch` handleTimeout
 
+          traceShowM ("bfState" :: String, bfState)
+          traceShowM ("oldPairs" :: String, oldPairs)
+          traceShowM ("pairs" :: String, pairs)
+
           newFill@(BlockFilling newState newPairs newFails) <-
                 foldM splitResults unchanged pairs
 
@@ -596,7 +608,7 @@ execNewBlock mpAccess parent miner = do
 
     enforceUnique rks rk
       | S.member rk rks =
-        throwM $ MempoolFillFailure $ "Duplicate transaction: " <> sshow rk
+        throwM $ MempoolFillFailure $ "Duplicate transaction: " <> sshow rk <> " in " <> sshow rks
       | otherwise = return $ S.insert rk rks
 
     pHeight = _blockHeight $ _parentHeader parent
@@ -659,45 +671,49 @@ execLocal cwtx preflight sigVerify rdepth = withDiscardedBatch $ do
         logger = P.newLogger _psLoggers "execLocal"
         initialGas = initialGasOf $ P._cmdPayload cwtx
 
-    for_ _psMempoolAccess $ \_ -> do
-        traceShowM ("got mempool" :: String)
-        -- TODO put a tx in mempool callback
+    r <- for _psMempoolAccess $ \mpa -> do
+        let mpa' = mpa { mpaGetBlock = \bf pc height hash bh -> if (ParentHeader bh) == _tcParentHeader ctx then return $ V.fromList [cwtx]
+            else mpaGetBlock mpa bf pc height hash bh }
+        execNewBlock mpa' rewindHeight (_tcParentHeader ctx) noMiner
 
+    traceShowM r
 
-    traceShowM ("execLocal.withCheckpointerRewind>" :: String)
-    withCheckpointerRewind rewindHeight rewindHeader "execLocal" $
-      \(PactDbEnv' pdbenv) -> do
-        --
-        -- if the ?preflight query parameter is set to True, we run the `applyCmd` workflow
-        -- otherwise, we prefer the old (default) behavior. When no preflight flag is
-        -- specified, we run the old behavior. When it is set to true, we also do metadata
-        -- validations.
-        --
-        r <- case preflight of
-          Just PreflightSimulation -> do
-            traceShowM ("execLocal.withCheckpointerRewind>preflight" :: String)
-            assertLocalMetadata cmd ctx sigVerify >>= \case
-              Right{} -> do
-                T3 cr _mc warns <- liftIO $ applyCmd
-                  _psVersion logger _psGasLogger pdbenv
-                  noMiner chainweb213GasModel ctx spv cmd
-                  initialGas mc ApplyLocal
+    -- traceShowM ("execLocal.withCheckpointerRewind>" :: String)
 
-                let cr' = toHashCommandResult cr
-                    warns' = P.renderCompactText <$> toList warns
-                pure $ LocalResultWithWarns cr' warns'
-              Left e -> pure $ MetadataValidationFailure e
-          _ ->  liftIO $ do
-            traceShowM ("execLocal.withCheckpointerRewind>not preflight" :: String)
-            cr <- applyLocal
-              logger _psGasLogger pdbenv
-              chainweb213GasModel ctx spv
-              cwtx mc execConfig
+    return $ LocalResultLegacy noCoinbase
+    -- withCheckpointerRewind rewindHeight rewindHeader "execLocal" $
+    --   \(PactDbEnv' pdbenv) -> do
+    --     --
+    --     -- if the ?preflight query parameter is set to True, we run the `applyCmd` workflow
+    --     -- otherwise, we prefer the old (default) behavior. When no preflight flag is
+    --     -- specified, we run the old behavior. When it is set to true, we also do metadata
+    --     -- validations.
+    --     --
+    --     r <- case preflight of
+    --       Just PreflightSimulation -> do
+    --         traceShowM ("execLocal.withCheckpointerRewind>preflight" :: String)
+    --         assertLocalMetadata cmd ctx sigVerify >>= \case
+    --           Right{} -> do
+    --             T3 cr _mc warns <- liftIO $ applyCmd
+    --               _psVersion logger _psGasLogger pdbenv
+    --               noMiner chainweb213GasModel ctx spv cmd
+    --               initialGas mc ApplyLocal
 
-            let cr' = toHashCommandResult cr
-            pure $ LocalResultLegacy cr'
+    --             let cr' = toHashCommandResult cr
+    --                 warns' = P.renderCompactText <$> toList warns
+    --             pure $ LocalResultWithWarns cr' warns'
+    --           Left e -> pure $ MetadataValidationFailure e
+    --       _ ->  liftIO $ do
+    --         traceShowM ("execLocal.withCheckpointerRewind>not preflight" :: String)
+    --         cr <- applyLocal
+    --           logger _psGasLogger pdbenv
+    --           chainweb213GasModel ctx spv
+    --           cwtx mc execConfig
 
-        return $ Discard r
+    --         let cr' = toHashCommandResult cr
+    --         pure $ LocalResultLegacy cr'
+
+    --     return $ Discard r
 
 execSyncToBlock
     :: CanReadablePayloadCas tbl
