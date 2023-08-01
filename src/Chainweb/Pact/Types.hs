@@ -402,6 +402,7 @@ data TxContext = TxContext
 data PactServiceEnv logger tbl = PactServiceEnv
     { _psMempoolAccess :: !(Maybe MemPoolAccess)
     , _psCheckpointer :: !(Checkpointer logger)
+    , _psROCheckpointer :: !(Checkpointer logger)
     , _psPdb :: !(PayloadDb tbl)
     , _psBlockHeaderDb :: !BlockHeaderDb
     , _psGasModel :: !(TxContext -> GasModel)
@@ -429,6 +430,7 @@ data PactServiceEnv logger tbl = PactServiceEnv
         -- ^ True when within a `withBatch` or `withDiscardBatch` call.
     , _psCheckpointerDepth :: !Int
         -- ^ Number of nested checkpointer calls
+    , _psROCheckpointerDepth :: !Int
     , _psBlockGasLimit :: !GasLimit
     , _psChainId :: !ChainId
     }

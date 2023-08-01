@@ -22,6 +22,7 @@ module Chainweb.Pact.Backend.Utils
   ( -- * General utils
     callDb
   , open2
+  , open2RO
   , chainDbFileName
     -- * Savepoints
   , withSavepoint
@@ -46,10 +47,14 @@ module Chainweb.Pact.Backend.Utils
   , execMulti
   -- * SQLite runners
   , withSqliteDb
+  , withROSqliteDb
   , startSqliteDb
+  , startROSqliteDb
   , stopSqliteDb
   , withSQLiteConnection
+  , withROSQLiteConnection
   , openSQLiteConnection
+  , openROSQLiteConnection
   , closeSQLiteConnection
   , withTempSQLiteConnection
   , withInMemSQLiteConnection
@@ -280,6 +285,18 @@ withSqliteDb cid logger dbDir resetDb = bracket
     (startSqliteDb cid logger dbDir resetDb)
     stopSqliteDb
 
+withROSqliteDb
+    :: Logger logger
+    => ChainId
+    -> logger
+    -> FilePath
+    -> Bool
+    -> (SQLiteEnv -> IO a)
+    -> IO a
+withROSqliteDb cid logger dbDir resetDb = bracket
+    (startROSqliteDb cid logger dbDir resetDb)
+    stopSqliteDb
+
 startSqliteDb
     :: Logger logger
     => ChainId
@@ -303,6 +320,29 @@ startSqliteDb cid logger dbDir doResetDb = do
     resetDb = removeDirectoryRecursive dbDir
     sqliteFile = dbDir </> chainDbFileName cid
 
+startROSqliteDb
+    :: Logger logger
+    => ChainId
+    -> logger
+    -> FilePath
+    -> Bool
+    -> IO SQLiteEnv
+startROSqliteDb cid logger dbDir doResetDb = do
+    when doResetDb resetDb
+    createDirectoryIfMissing True dbDir
+    textLog Info $ mconcat
+        [ "opened sqlitedb for "
+        , sshow cid
+        , " in directory "
+        , sshow dbDir
+        ]
+    textLog Info $ "opening sqlitedb named " <> T.pack sqliteFile
+    openROSQLiteConnection sqliteFile chainwebPragmas
+  where
+    textLog = logFunctionText logger
+    resetDb = removeDirectoryRecursive dbDir
+    sqliteFile = dbDir </> chainDbFileName cid
+
 chainDbFileName :: ChainId -> FilePath
 chainDbFileName cid = fold
     [ "pact-v1-chain-"
@@ -317,11 +357,26 @@ withSQLiteConnection :: String -> [Pragma] -> (SQLiteEnv -> IO c) -> IO c
 withSQLiteConnection file ps =
     bracket (openSQLiteConnection file ps) closeSQLiteConnection
 
+withROSQLiteConnection :: String -> [Pragma] -> (SQLiteEnv -> IO c) -> IO c
+withROSQLiteConnection file ps =
+    bracket (openROSQLiteConnection file ps) closeSQLiteConnection
+
 openSQLiteConnection :: String -> [Pragma] -> IO SQLiteEnv
 openSQLiteConnection file ps = open2 file >>= \case
     Left (err, msg) ->
       internalError $
       "withSQLiteConnection: Can't open db with "
+      <> asString (show err) <> ": " <> asString (show msg)
+    Right r -> do
+      runPragmas r ps
+      return $ SQLiteEnv r
+        (SQLiteConfig file ps)
+
+openROSQLiteConnection :: String -> [Pragma] -> IO SQLiteEnv
+openROSQLiteConnection file ps = open2 file >>= \case
+    Left (err, msg) ->
+      internalError $
+      "withROSQLiteConnection: Can't open db with "
       <> asString (show err) <> ": " <> asString (show msg)
     Right r -> do
       runPragmas r ps
@@ -354,12 +409,19 @@ open2 file = open_v2
     (collapseFlags [sqlite_open_readwrite , sqlite_open_create , sqlite_open_fullmutex])
     Nothing -- Nothing corresponds to the nullPtr
 
+open2RO :: String -> IO (Either (SQ3.Error, SQ3.Utf8) SQ3.Database)
+open2RO file = open_v2
+    (fromString file)
+    (collapseFlags [sqlite_open_readonly , sqlite_open_fullmutex])
+    Nothing -- Nothing corresponds to the nullPtr
+
 collapseFlags :: [SQLiteFlag] -> SQLiteFlag
 collapseFlags xs =
     if Prelude.null xs then error "collapseFlags: You must pass a non-empty list"
     else Prelude.foldr1 (.|.) xs
 
-sqlite_open_readwrite, sqlite_open_create, sqlite_open_fullmutex :: SQLiteFlag
+sqlite_open_readonly, sqlite_open_readwrite, sqlite_open_create, sqlite_open_fullmutex :: SQLiteFlag
+sqlite_open_readonly = 0x00000001
 sqlite_open_readwrite = 0x00000002
 sqlite_open_create = 0x00000004
 sqlite_open_fullmutex = 0x00010000

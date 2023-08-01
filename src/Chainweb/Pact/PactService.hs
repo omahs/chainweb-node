@@ -120,10 +120,11 @@ runPactService
     -> BlockHeaderDb
     -> PayloadDb tbl
     -> SQLiteEnv
+    -> SQLiteEnv
     -> PactServiceConfig
     -> IO ()
-runPactService ver cid chainwebLogger reqQ mempoolAccess bhDb pdb sqlenv config =
-    void $ withPactService ver cid chainwebLogger bhDb pdb sqlenv config $ do
+runPactService ver cid chainwebLogger reqQ mempoolAccess bhDb pdb sqlenv rosqlenv config =
+    void $ withPactService ver cid chainwebLogger bhDb pdb sqlenv rosqlenv config $ do
         initialPayloadState mempoolAccess ver cid
         serviceRequests mempoolAccess reqQ
 
@@ -136,16 +137,19 @@ withPactService
     -> BlockHeaderDb
     -> PayloadDb tbl
     -> SQLiteEnv
+    -> SQLiteEnv
     -> PactServiceConfig
     -> PactServiceM logger tbl a
     -> IO (T2 a PactServiceState)
-withPactService ver cid chainwebLogger bhDb pdb sqlenv config act =
+withPactService ver cid chainwebLogger bhDb pdb sqlenv rosqlenv config act =
     withProdRelationalCheckpointer checkpointerLogger initialBlockState sqlenv ver cid $ \checkpointer -> do
+    withProdRelationalCheckpointer checkpointerLogger initialBlockState rosqlenv ver cid $ \rocheckpointer -> do
         let !rs = readRewards
             !initialParentHeader = ParentHeader $ genesisBlockHeader ver cid
             !pse = PactServiceEnv
                     { _psMempoolAccess = Nothing
                     , _psCheckpointer = checkpointer
+                    , _psROCheckpointer = rocheckpointer
                     , _psPdb = pdb
                     , _psBlockHeaderDb = bhDb
                     , _psGasModel = getGasModel
@@ -159,6 +163,7 @@ withPactService ver cid chainwebLogger bhDb pdb sqlenv config act =
                     , _psAllowReadsInLocal = _pactAllowReadsInLocal config
                     , _psIsBatch = False
                     , _psCheckpointerDepth = 0
+                    , _psROCheckpointerDepth = 0
                     , _psLogger = pactServiceLogger
                     , _psGasLogger = gasLogger <$ guard (_pactLogGas config)
                     , _psBlockGasLimit = _pactBlockGasLimit config
