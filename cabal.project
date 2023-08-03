@@ -172,3 +172,5 @@ constraints: prettyprinter <1.6.1
 -- constraints: megaparsec <9.3
 allow-newer: prettyprinter:*
 allow-newer: webauthn:time
+
+>>>>>>> 067e79e7 (support hashable-1.4.3 (#1717))
