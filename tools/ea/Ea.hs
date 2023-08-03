@@ -169,8 +169,8 @@ genPayloadModule v tag cid cwTxs =
         let logger = genericLogger Warn TIO.putStrLn
         pdb <- newPayloadDb
         withSystemTempDirectory "ea-pact-db" $ \pactDbDir -> do
-            T2 payloadWO _ <- withSqliteDb cid logger pactDbDir False $ \env ->
-                withPactService v cid logger bhdb pdb env testPactServiceConfig $
+            T2 payloadWO _ <- withROSqliteDb cid logger pactDbDir False $ \roenv -> withSqliteDb cid logger pactDbDir False $ \env ->
+                withPactService v cid logger bhdb pdb env roenv testPactServiceConfig $
                     execNewGenesisBlock noMiner (V.fromList cwTxs)
             return $ TL.toStrict $ TB.toLazyText $ payloadModuleCode tag payloadWO
 

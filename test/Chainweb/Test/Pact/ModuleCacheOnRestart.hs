@@ -80,33 +80,34 @@ tests rdb =
       withEmptyMVarResource $ \rewindDataM ->
       withTestBlockDbTest testVer rdb $ \bdbio ->
       withTempSQLiteResource $ \ioSqlEnv ->
+      withTempROSQLiteResource $ \roioSqlEnv ->
       testGroup label
-      [ testCaseSteps "testInitial" $ withPact' bdbio ioSqlEnv iom testInitial
+      [ testCaseSteps "testInitial" $ withPact' bdbio ioSqlEnv roioSqlEnv iom testInitial
       , after AllSucceed "testInitial" $
-        testCaseSteps "testRestart1" $ withPact' bdbio ioSqlEnv iom testRestart
+        testCaseSteps "testRestart1" $ withPact' bdbio ioSqlEnv roioSqlEnv iom testRestart
       , after AllSucceed "testRestart1" $
         -- wow, Tasty thinks there's a "loop" if the following test is called "testCoinbase"!!
-        testCaseSteps "testDoUpgrades" $ withPact' bdbio ioSqlEnv iom (testCoinbase bdbio)
+        testCaseSteps "testDoUpgrades" $ withPact' bdbio ioSqlEnv roioSqlEnv iom (testCoinbase bdbio)
       , after AllSucceed "testDoUpgrades" $
-        testCaseSteps "testRestart2" $ withPact' bdbio ioSqlEnv iom testRestart
+        testCaseSteps "testRestart2" $ withPact' bdbio ioSqlEnv roioSqlEnv iom testRestart
       , after AllSucceed "testRestart2" $
-        testCaseSteps "testV3" $ withPact' bdbio ioSqlEnv iom (testV3 bdbio rewindDataM)
+        testCaseSteps "testV3" $ withPact' bdbio ioSqlEnv roioSqlEnv iom (testV3 bdbio rewindDataM)
       , after AllSucceed "testV3" $
-        testCaseSteps "testRestart3"$ withPact' bdbio ioSqlEnv iom testRestart
+        testCaseSteps "testRestart3"$ withPact' bdbio ioSqlEnv roioSqlEnv iom testRestart
       , after AllSucceed "testRestart3" $
-        testCaseSteps "testV4" $ withPact' bdbio ioSqlEnv iom (testV4 bdbio rewindDataM)
+        testCaseSteps "testV4" $ withPact' bdbio ioSqlEnv roioSqlEnv iom (testV4 bdbio rewindDataM)
       , after AllSucceed "testV4" $
-        testCaseSteps "testRestart4" $ withPact' bdbio ioSqlEnv iom testRestart
+        testCaseSteps "testRestart4" $ withPact' bdbio ioSqlEnv roioSqlEnv iom testRestart
       , after AllSucceed "testRestart4" $
-        testCaseSteps "testRewindAfterFork" $ withPact' bdbio ioSqlEnv iom (testRewindAfterFork bdbio rewindDataM)
+        testCaseSteps "testRewindAfterFork" $ withPact' bdbio ioSqlEnv roioSqlEnv iom (testRewindAfterFork bdbio rewindDataM)
       , after AllSucceed "testRewindAfterFork" $
-        testCaseSteps "testRewindBeforeFork" $ withPact' bdbio ioSqlEnv iom (testRewindBeforeFork bdbio rewindDataM)
+        testCaseSteps "testRewindBeforeFork" $ withPact' bdbio ioSqlEnv roioSqlEnv iom (testRewindBeforeFork bdbio rewindDataM)
       , after AllSucceed "testRewindBeforeFork" $
-        testCaseSteps "testCw217CoinOnly" $ withPact' bdbio ioSqlEnv iom $
+        testCaseSteps "testCw217CoinOnly" $ withPact' bdbio ioSqlEnv roioSqlEnv iom $
           testCw217CoinOnly bdbio rewindDataM
       , after AllSucceed "testCw217CoinOnly" $
         testCaseSteps "testRestartCw217" $
-        withPact' bdbio ioSqlEnv iom testRestart
+        withPact' bdbio ioSqlEnv roioSqlEnv iom testRestart
       ]
   where
     label = "Chainweb.Test.Pact.ModuleCacheOnRestart"
@@ -297,17 +298,19 @@ withPact'
     :: (Logger logger, logger ~ GenericLogger)
     => IO TestBlockDb
     -> IO SQLiteEnv
+    -> IO SQLiteEnv
     -> IO (MVar ModuleInitCache)
     -> CacheTest logger RocksDbTable
     -> (String -> IO ())
     -> Assertion
-withPact' bdbio ioSqlEnv r (ps, cacheTest) tastylog = do
+withPact' bdbio ioSqlEnv ioROSqlEnv r (ps, cacheTest) tastylog = do
     bdb <- bdbio
     bhdb <- getWebBlockHeaderDb (_bdbWebBlockHeaderDb bdb) testChainId
     let pdb = _bdbPayloadDb bdb
     sqlEnv <- ioSqlEnv
+    rosqlEnv <- ioROSqlEnv
     T2 _ pstate <- withPactService
-        testVer testChainId logger bhdb pdb sqlEnv testPactServiceConfig ps
+        testVer testChainId logger bhdb pdb sqlEnv rosqlEnv testPactServiceConfig ps
     cacheTest r (_psInitCache pstate)
   where
     logger = genericLogger Quiet (tastylog . T.unpack)

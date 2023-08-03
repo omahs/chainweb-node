@@ -57,6 +57,7 @@ module Chainweb.Pact.Backend.Utils
   , openROSQLiteConnection
   , closeSQLiteConnection
   , withTempSQLiteConnection
+  , withTempROSQLiteConnection
   , withInMemSQLiteConnection
   -- * SQLite Pragmas
   , chainwebPragmas
@@ -394,6 +395,9 @@ closeSQLiteConnection c = void $ close_v2 $ _sConn c
 --
 withTempSQLiteConnection :: [Pragma] -> (SQLiteEnv -> IO c) -> IO c
 withTempSQLiteConnection = withSQLiteConnection ""
+
+withTempROSQLiteConnection :: [Pragma] -> (SQLiteEnv -> IO c) -> IO c
+withTempROSQLiteConnection = withROSQLiteConnection ""
 
 -- Using the special file name @:memory:@ causes sqlite to create a temporary in-memory
 -- database.

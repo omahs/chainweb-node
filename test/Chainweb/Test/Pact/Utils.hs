@@ -603,25 +603,28 @@ testPactCtxSQLite
   -> BlockHeaderDb
   -> PayloadDb tbl
   -> SQLiteEnv
+  -> SQLiteEnv
   -> PactServiceConfig
   -> (TxContext -> GasModel)
   -> IO (TestPactCtx logger tbl, PactDbEnv' logger)
-testPactCtxSQLite logger v cid bhdb pdb sqlenv conf gasmodel = do
+testPactCtxSQLite logger v cid bhdb pdb sqlenv rosqlenv conf gasmodel = do
     (dbSt,cp) <- initRelationalCheckpointer' initialBlockState sqlenv cpLogger v cid
+    (_,rocp) <- initRelationalCheckpointer' initialBlockState rosqlenv cpLogger v cid
     let rs = readRewards
     let ph = ParentHeader $ genesisBlockHeader v cid
     !ctx <- TestPactCtx
       <$!> newMVar (PactServiceState Nothing mempty ph noSPVSupport)
-      <*> pure (pactServiceEnv cp rs)
+      <*> pure (pactServiceEnv cp rocp rs)
     evalPactServiceM_ ctx (initialPayloadState mempty v cid)
     return (ctx, PactDbEnv' dbSt)
   where
     initialBlockState = initBlockState defaultModuleCacheLimit $ genesisHeight v cid
     cpLogger = addLabel ("chain-id", chainIdToText cid) $ addLabel ("sub-component", "checkpointer") $ logger
-    pactServiceEnv :: Checkpointer logger -> MinerRewards -> PactServiceEnv logger tbl
-    pactServiceEnv cp rs = PactServiceEnv
+    pactServiceEnv :: Checkpointer logger -> Checkpointer logger -> MinerRewards -> PactServiceEnv logger tbl
+    pactServiceEnv cp rocp rs = PactServiceEnv
         { _psMempoolAccess = Nothing
         , _psCheckpointer = cp
+        , _psROCheckpointer = rocp
         , _psPdb = pdb
         , _psBlockHeaderDb = bhdb
         , _psGasModel = gasmodel
@@ -635,6 +638,7 @@ testPactCtxSQLite logger v cid bhdb pdb sqlenv conf gasmodel = do
         , _psAllowReadsInLocal = _pactAllowReadsInLocal conf
         , _psIsBatch = False
         , _psCheckpointerDepth = 0
+        , _psROCheckpointerDepth = 0
         , _psLogger = addLabel ("chain-id", chainIdToText cid) $ addLabel ("component", "pact") $ _cpLogger cp
         , _psGasLogger = Nothing
         , _psBlockGasLimit = _pactBlockGasLimit conf
@@ -657,21 +661,25 @@ withWebPactExecutionService
     -> ((WebPactExecutionService,HM.HashMap ChainId PactExecutionService) -> IO a)
     -> IO a
 withWebPactExecutionService logger v pactConfig bdb mempoolAccess gasmodel act =
+  withRODbs $ \rosqlenvs -> do
   withDbs $ \sqlenvs -> do
     pacts <- fmap HM.fromList
            $ traverse mkPact
            $ zip sqlenvs
+           $ zip rosqlenvs
            $ toList
            $ chainIds v
     act (mkWebPactExecutionService pacts, pacts)
   where
     withDbs f = foldl' (\soFar _ -> withDb soFar) f (chainIds v) []
     withDb g envs = withTempSQLiteConnection chainwebPragmas $ \s -> g (s : envs)
+    withRODbs f = foldl' (\soFar _ -> withRODb soFar) f (chainIds v) []
+    withRODb g envs = withTempROSQLiteConnection chainwebPragmas $ \s -> g (s : envs)
 
-    mkPact :: (SQLiteEnv, ChainId) -> IO (ChainId, PactExecutionService)
-    mkPact (sqlenv, c) = do
+    mkPact :: (SQLiteEnv, (SQLiteEnv, ChainId)) -> IO (ChainId, PactExecutionService)
+    mkPact (sqlenv, (rosqlenv, c)) = do
         bhdb <- getBlockHeaderDb c bdb
-        (ctx,_) <- testPactCtxSQLite logger v c bhdb (_bdbPayloadDb bdb) sqlenv pactConfig gasmodel
+        (ctx,_) <- testPactCtxSQLite logger v c bhdb (_bdbPayloadDb bdb) sqlenv rosqlenv pactConfig gasmodel
         return $ (c,) $ PactExecutionService
           { _pactNewBlock = \m p ->
               evalPactServiceM_ ctx $ execNewBlock mempoolAccess p m
@@ -724,6 +732,14 @@ initializeSQLite = open2 file >>= \case
   where
     file = "" {- temporary sqlitedb -}
 
+initializeROSQLite :: IO SQLiteEnv
+initializeROSQLite = open2RO file >>= \case
+    Left (_err, _msg) ->
+        internalError "initializeSQLite: A connection could not be opened."
+    Right r ->  return (SQLiteEnv r (SQLiteConfig file chainwebPragmas))
+  where
+    file = "" {- temporary sqlitedb -}
+
 freeSQLiteResource :: SQLiteEnv -> IO ()
 freeSQLiteResource sqlenv = void $ close_v2 $ _sConn sqlenv
 
@@ -742,19 +758,23 @@ withPactCtxSQLite
   -> TestTree
 withPactCtxSQLite logger v bhdbIO pdbIO conf f =
   withResource
+    initializeROSQLite
+    freeSQLiteResource $ \roio ->
+  withResource
     initializeSQLite
     freeSQLiteResource $ \io ->
-      withResource (start io) destroy $ \ctxIO -> f $ \toPact -> do
+      withResource (start io roio) destroy $ \ctxIO -> f $ \toPact -> do
           (ctx, dbSt) <- ctxIO
           evalPactServiceM_ ctx (toPact dbSt)
   where
     destroy = destroyTestPactCtx . fst
-    start ios = do
+    start ios roio = do
         let cid = someChainId v
         bhdb <- bhdbIO
         pdb <- pdbIO
         s <- ios
-        testPactCtxSQLite logger v cid bhdb pdb s conf freeGasModel
+        ros <- roio
+        testPactCtxSQLite logger v cid bhdb pdb s ros conf freeGasModel
 
 toTxCreationTime :: Integral a => Time a -> TxCreationTime
 toTxCreationTime (Time timespan) = TxCreationTime $ fromIntegral $ timeSpanToSeconds timespan
@@ -846,8 +866,9 @@ withPactTestBlockDb version cid rdb mempoolIO pactConfig f =
         bhdb <- getWebBlockHeaderDb (_bdbWebBlockHeaderDb bdb) cid
         let pdb = _bdbPayloadDb bdb
         sqlEnv <- startSqliteDb cid logger dir False
+        rosqlEnv <- startROSqliteDb cid logger dir False
         a <- async $ runForever (\_ _ -> return ()) "Chainweb.Test.Pact.Utils.withPactTestBlockDb" $
-            runPactService version cid logger reqQ mempool bhdb pdb sqlEnv pactConfig
+            runPactService version cid logger reqQ mempool bhdb pdb sqlEnv rosqlEnv pactConfig
         return (a, sqlEnv, (reqQ,bdb))
 
     stopPact (a, sqlEnv, _) = cancel a >> stopSqliteDb sqlEnv

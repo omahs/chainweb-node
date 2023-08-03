@@ -72,6 +72,7 @@ module Chainweb.Pact.Types
   , PactServiceEnv(..)
   , psMempoolAccess
   , psCheckpointer
+  , psROCheckpointer
   , psPdb
   , psBlockHeaderDb
   , psGasModel
@@ -87,6 +88,7 @@ module Chainweb.Pact.Types
   , psAllowReadsInLocal
   , psIsBatch
   , psCheckpointerDepth
+  , psROCheckpointerDepth
   , psBlockGasLimit
   , psChainId
 

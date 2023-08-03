@@ -258,9 +258,10 @@ withResources rdb trunkLength logLevel f = C.envWithCleanup create destroy unwra
         nonceCounter <- newIORef 1
         txPerBlock <- newIORef 10
         sqlEnv <- openSQLiteConnection "" {- temporary SQLite db -} chainwebBenchPragmas
+        rosqlEnv <- openROSQLiteConnection "" {- temporary SQLite db -} chainwebBenchPragmas
         mp <- testMemPoolAccess txPerBlock coinAccounts
         pactService <-
-          startPact testVer logger blockHeaderDb payloadDb mp sqlEnv
+          startPact testVer logger blockHeaderDb payloadDb mp sqlEnv rosqlEnv
         mainTrunkBlocks <-
           playLine payloadDb blockHeaderDb trunkLength genesisBlock (snd pactService) nonceCounter
         return $ NoopNFData $ Resources {..}
@@ -273,9 +274,9 @@ withResources rdb trunkLength logLevel f = C.envWithCleanup create destroy unwra
 
     logger = genericLogger logLevel T.putStrLn
 
-    startPact version l bhdb pdb mempool sqlEnv = do
+    startPact version l bhdb pdb mempool sqlEnv rosqlEnv = do
         reqQ <- newPactQueue pactQueueSize
-        a <- async $ runPactService version cid l reqQ mempool bhdb pdb sqlEnv testPactServiceConfig
+        a <- async $ runPactService version cid l reqQ mempool bhdb pdb sqlEnv rosqlEnv testPactServiceConfig
             { _pactBlockGasLimit = 150000
             }
 

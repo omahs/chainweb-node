@@ -34,6 +34,7 @@ module Chainweb.Test.Utils
 
 -- * SQLite Database Test Resource
 , withTempSQLiteResource
+, withTempROSQLiteResource
 , withInMemSQLiteResource
 
 -- * Data Generation
@@ -212,7 +213,7 @@ import Chainweb.MerkleUniverse
 import Chainweb.Miner.Config
 import Chainweb.Miner.Pact
 import Chainweb.Pact.Backend.Types (SQLiteEnv(..))
-import Chainweb.Pact.Backend.Utils (openSQLiteConnection, closeSQLiteConnection, chainwebPragmas)
+import Chainweb.Pact.Backend.Utils (openSQLiteConnection, openROSQLiteConnection, closeSQLiteConnection, chainwebPragmas)
 import Chainweb.Payload.PayloadStore
 import Chainweb.RestAPI
 import Chainweb.RestAPI.NetworkID
@@ -304,8 +305,19 @@ withSQLiteResource file = withResource
     (openSQLiteConnection file chainwebPragmas)
     closeSQLiteConnection
 
+withROSQLiteResource
+    :: String
+    -> (IO SQLiteEnv -> TestTree)
+    -> TestTree
+withROSQLiteResource file = withResource
+    (openROSQLiteConnection file chainwebPragmas)
+    closeSQLiteConnection
+
 withTempSQLiteResource :: (IO SQLiteEnv -> TestTree) -> TestTree
 withTempSQLiteResource = withSQLiteResource ""
+
+withTempROSQLiteResource :: (IO SQLiteEnv -> TestTree) -> TestTree
+withTempROSQLiteResource = withROSQLiteResource ""
 
 withInMemSQLiteResource :: (IO SQLiteEnv -> TestTree) -> TestTree
 withInMemSQLiteResource = withSQLiteResource ":memory:"

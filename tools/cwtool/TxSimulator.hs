@@ -101,9 +101,11 @@ simulate sc@(SimConfig dbDir txIdx' _ _ cid ver gasLog doTypecheck) = do
   cenv <- setupClient sc
   (parent:hdrs) <- fetchHeaders sc cenv
   pwos <- fetchOutputs sc cenv hdrs
-  withSqliteDb cid cwLogger dbDir False $ \sqlenv -> do
+  withROSqliteDb cid cwLogger dbDir False $ \rosqlenv -> withSqliteDb cid cwLogger dbDir False $ \sqlenv -> do
     cp <-
       initRelationalCheckpointer (initBlockState defaultModuleCacheLimit 0) sqlenv logger ver cid
+    rocp <-
+      initRelationalCheckpointer (initBlockState defaultModuleCacheLimit 0) rosqlenv logger ver cid
     bracket_
       (_cpBeginCheckpointerBatch cp)
       (_cpDiscardCheckpointerBatch cp) $ case (txIdx',doTypecheck) of
@@ -162,6 +164,7 @@ simulate sc@(SimConfig dbDir txIdx' _ _ cid ver gasLog doTypecheck) = do
                 pse = PactServiceEnv
                   { _psMempoolAccess = Nothing
                   , _psCheckpointer = cp
+                  , _psROCheckpointer = rocp
                   , _psPdb = paydb
                   , _psBlockHeaderDb = bdb
                   , _psGasModel = getGasModel
@@ -177,6 +180,7 @@ simulate sc@(SimConfig dbDir txIdx' _ _ cid ver gasLog doTypecheck) = do
                   , _psGasLogger = gasLogger
                   , _psIsBatch = False
                   , _psCheckpointerDepth = 1
+                  , _psROCheckpointerDepth = 1
                   , _psBlockGasLimit = testBlockGasLimit
                   , _psChainId = cid
                   }
