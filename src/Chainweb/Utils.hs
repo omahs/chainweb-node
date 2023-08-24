@@ -16,6 +16,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
+-- {-# LANGUAGE ViewPatterns #-}
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# OPTIONS_GHC -fno-warn-deprecations #-}
@@ -103,7 +104,6 @@ module Chainweb.Utils
 , encodeB64UrlNoPaddingText
 , b64UrlNoPaddingTextEncoding
 , decodeB64UrlNoPaddingText
-, decodeB64UrlNoPaddingTextWithFixedErrorMessage
 
 -- ** JSON
 , encodeToText
@@ -244,6 +244,7 @@ import qualified Data.ByteString.Builder as BB
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Csv as CSV
 import Data.Decimal
+-- import qualified Data.List as L
 import Data.Functor.Of
 import Data.Hashable
 import qualified Data.HashMap.Strict as HM
@@ -284,7 +285,7 @@ import System.Timeout
 import Text.Printf (printf)
 import Text.Read (readEither)
 
-import Pact.Types.Util (base64DowngradeErrorMessage)
+-- import Pact.Types.Util (base64DowngradeErrorMessage)
 
 -- -------------------------------------------------------------------------- --
 -- SI unit prefixes
@@ -624,19 +625,6 @@ decodeB64UrlNoPaddingText = fromEitherM
   where
     pad t = let s = T.length t `mod` 4 in t <> T.replicate ((4 - s) `mod` 4) "="
 {-# INLINE decodeB64UrlNoPaddingText #-}
-
-decodeB64UrlNoPaddingTextWithFixedErrorMessage :: MonadThrow m => T.Text -> m B.ByteString
-decodeB64UrlNoPaddingTextWithFixedErrorMessage = fromEitherM
-    . first (Base64DecodeException . T.pack . base64DowngradeErrorMessage)
-    . B64U.decode
-    . T.encodeUtf8
-    . pad
-  where
-    pad t =
-      case T.length t `mod` 4 of
-        1 -> t -- Do not pad bytestrings when (length % 4 == 1)
-        s -> t <> T.replicate ((4 - s) `mod` 4) "="
-{-# INLINE decodeB64UrlNoPaddingTextWithFixedErrorMessage #-}
 
 
 -- | Encode a binary value to a textual base64-url without padding

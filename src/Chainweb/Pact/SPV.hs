@@ -5,7 +5,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE ViewPatterns #-}
 
 -- |
 -- Module: Chainweb.Pact.PactService
@@ -29,6 +31,7 @@ module Chainweb.Pact.SPV
 import GHC.Stack
 
 import Control.Error
+import Control.Monad.IO.Class (MonadIO)
 import Control.Lens hiding (index)
 import Control.Monad
 import Control.Monad.Catch
@@ -40,6 +43,7 @@ import Data.Bifunctor
 import Data.Default (def)
 import qualified Data.Map.Strict as M
 import Data.Text (Text, pack)
+import qualified Data.Text as Text
 import qualified Data.Text.Encoding as T
 
 import Crypto.Hash.Algorithms
@@ -71,6 +75,11 @@ import qualified Chainweb.Version as CW
 import qualified Chainweb.Version.Guards as CW
 
 import Chainweb.Storage.Table
+
+import System.IO (openFile, hPutStrLn, hClose, IOMode(AppendMode))
+import qualified Data.ByteString as B
+import qualified Data.Text as T
+import qualified Data.ByteString.Base64.URL as B64U
 
 -- internal pact modules
 
@@ -170,6 +179,69 @@ verifySPV bdb bh typ proof = runExceptT $ go typ proof
       t -> throwError $! "unsupported SPV types: " <> t
 
 
+-- TODO: At some point, fork so that old behavior reproduces extra padding,
+-- after fork, fail faster on invalidly base64-encoded strings.
+decodeB64UrlNoPaddingTextWithFixedErrorMessage :: (MonadThrow m, MonadIO m) => T.Text -> m B.ByteString
+decodeB64UrlNoPaddingTextWithFixedErrorMessage txt = do
+  let
+    res =
+        first (\e -> Base64DecodeException $ base64DowngradeErrorMessage2 (Text.pack e))
+        . B64U.decode
+        . T.encodeUtf8
+        . pad
+        $ txt
+    pad t =
+      case T.length t `mod` 4 of
+        -- 1 -> t -- Do not pad bytestrings when (length % 4 == 1)
+        s -> t <> T.replicate ((4 - s) `mod` 4) "="
+  case res of
+    Right _ -> return ()
+    Left (Base64DecodeException e) -> liftIO $ do
+      h <- openFile "base64Errors.txt" AppendMode
+      hPutStrLn h (T.unpack e)
+      hClose h
+    Left e -> error $ "unexpected: " ++ show e
+  fromEitherM res
+{-# INLINE decodeB64UrlNoPaddingTextWithFixedErrorMessage #-}
+
+
+
+-- | Converts the error message format of base64-bytestring-1.2
+--   into that of base64-bytestring-0.1, for the error messages
+--   that have made it onto the chain.
+--   This allows us to upgrade to base64-bytestring-1.2 without
+--   breaking compatibility.
+base64DowngradeErrorMessage2 :: Text -> Text
+base64DowngradeErrorMessage2
+   "Base64-encoded bytestring has invalid size" =
+       "invalid base64 encoding near offset 0"
+base64DowngradeErrorMessage2
+  t@(Text.stripPrefix "invalid character at offset: " -> Just suffix) =
+  let
+    finalThreeChars = do
+      (rest,z) <- Text.unsnoc t
+      (rest2,y) <- Text.unsnoc rest
+      (_,x) <- Text.unsnoc rest2
+      return (x,y,z)
+    paddingAdjustment =
+      maybe 0 (\(x,y,z) -> if (x,y,z) == ('=','=','=') then -1 else 0) finalThreeChars
+    offset :: Int = read $ Text.unpack suffix
+    adjustedOffset = offset - (offset `rem` 4) + paddingAdjustment
+  in Text.pack $ "invalid base64 encoding near offset " ++ show adjustedOffset
+base64DowngradeErrorMessage2
+  t@(Text.stripPrefix "invalid padding at offset: " -> Just suffix) =
+  let
+    finalThreeChars = do
+      (rest,z) <- Text.unsnoc t
+      (rest2,y) <- Text.unsnoc rest
+      (_,x) <- Text.unsnoc rest2
+      return (x,y,z)
+    paddingAdjustment =
+      maybe 0 (\(x,y,z) -> if (x,y,z) == ('=','=','=') then -1 else 0) finalThreeChars
+    offset :: Int = read $ Text.unpack suffix
+    adjustedOffset = offset - (offset `rem` 4) + paddingAdjustment
+  in Text.pack $ "invalid padding near offset " ++ show adjustedOffset
+base64DowngradeErrorMessage2 e = e
 
 -- | SPV defpact transaction verification support. This call validates a pact 'endorsement'
 -- in Pact, providing a validation that the yield data of a cross-chain pact is valid.

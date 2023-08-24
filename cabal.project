@@ -164,10 +164,6 @@ allow-newer: base-compat-batteries:*
 -- -------------------------------------------------------------------------- --
 -- Upper Bounds
 
--- required by pact
--- these upper bounds are required in order to not break payload validation
-constraints: prettyprinter <1.6.1
-
 -- other pact induced bounds (not relevant for on-chain semantics)
 -- constraints: megaparsec <9.3
 allow-newer: prettyprinter:*

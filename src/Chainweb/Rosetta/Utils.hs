@@ -36,7 +36,6 @@ import qualified Data.Text.Encoding as T
 import qualified Pact.Types.Runtime as P
 import qualified Pact.Types.RPC as P
 import qualified Pact.Types.Command as P
-import qualified Pact.Types.Scheme as P
 import qualified Pact.Parse as P
 import qualified Data.Set as S
 import Data.Maybe ( fromMaybe )
